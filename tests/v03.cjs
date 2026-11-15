@@ -1,0 +1,45 @@
+const { chromium, webkit, devices } = require('playwright');
+const fs=require('node:fs'),http=require('node:http'),assert=require('node:assert/strict');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(html)});
+(async()=>{await new Promise(r=>server.listen(0,'127.0.0.1',r));const url=`http://127.0.0.1:${server.address().port}`;
+try{for(const [name,type] of Object.entries({chromium,webkit})){
+ const browser=await type.launch({headless:true});const context=await browser.newContext({...devices['iPhone 13'],defaultBrowserType:undefined,timezoneId:'America/Los_Angeles'});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const legacy={answers:[{id:0,mode:'tf',ok:false,date:'2026-11-14T14:59:59Z'},{id:0,mode:'mc',ok:true,date:'2026-11-14T15:00:00Z'}],sessions:[{date:'2026-11-14T15:00:00Z',mode:'tf',review:false,count:2,correct:1}],wrong:[]};
+ await page.addInitScript(d=>localStorage.setItem('fp-study-2-v1',JSON.stringify(d)),legacy);await page.goto(url);
+ assert.equal(await page.evaluate(()=>data.answers.length),2);assert.deepEqual(await page.evaluate(()=>data.cycleSeen),[0]);
+ const checks=await page.evaluate(()=>{
+ const check=(ok,label)=>{if(!ok)throw Error(label)};
+ check(bank.length===180&&mcStems.length===180,'180 questions');
+ check(questionMetadata.every(m=>m.source===null&&m.lawAsOf===null&&m.difficulty===null),'honest metadata');
+ let state=emptyData(),seen=new Set();for(let n=0;n<18;n++){const ids=selectQuestions(state,-1,false);check(ids.length===10,'10 per session');ids.forEach(id=>{check(!seen.has(id),'no repeat before cycle');seen.add(id);state.cycleSeen.push(id)})}check(seen.size===180,'full cycle');check(selectQuestions(state,-1,false).length===10&&state.cycleSeen.length===0,'next cycle');
+ state.cycleSeen=bank.map((_,i)=>i).slice(0,179);check(selectQuestions(state,-1,false).length===1,'cycle boundary');
+ state.cycleSeen=bank.map((_,i)=>i).filter(i=>bank[i][0]===0);check(selectQuestions(state,0,false).length===0,'category must wait');
+ check(localDay('2026-11-14T14:59:59Z')==='2026-11-14'&&localDay('2026-11-14T15:00:00Z')==='2026-11-15','JST midnight');
+ const a=[{id:0,ok:false,date:'2026-11-14T15:00:00Z'},{id:0,ok:true,date:'2026-11-15T15:00:00Z'}];check(metrics(a).first==='0%'&&metrics(a).recent==='50%'&&metrics(a).wrong===1,'metrics');
+ const days=['2024-02-28','2024-02-29','2024-03-01'].map(d=>({date:d+'T03:00:00Z'}));check(streaks(days,'2024-03-02').current===3&&streaks(days,'2024-03-03').current===0&&streaks(days,'2024-03-03').longest===3,'leap year streak');
+ check(parseBackup(JSON.stringify(data)).answers.length===2,'legacy JSON');check(parseBackup(JSON.stringify({app:'fp-study-2',version:3,data})).answers.length===2,'v3 JSON');
+ for(const raw of [{},{answers:[{id:999}],sessions:[],wrong:[]},{...data,cycleSeen:[999]},{...data,schemaVersion:99}]){let rejected=false;try{validateData(raw)}catch{rejected=true}check(rejected,'invalid backup rejected')}
+ return true;});assert(checks);
+ await page.evaluate(()=>{data=emptyData();data.cycleSeen=bank.map((_,i)=>i).filter(i=>i!==0);startQuiz(false)});
+ await page.locator('.choice').nth(1).click();await page.locator('#submit').click();await page.evaluate(()=>submitAnswer());assert.equal(await page.evaluate(()=>data.answers.length),1);
+ assert.equal(await page.locator('#feedback').textContent(),await page.evaluate(()=> '✕ 不正解：'+bank[quiz[idx]][5]));
+ await page.locator('#next').click();await page.waitForTimeout(3200);assert.equal(await page.evaluate(()=>review),true);assert.equal(await page.evaluate(()=>quiz[0]),0);
+ await page.locator('.choice').first().click();await page.locator('#submit').click();await page.locator('#next').click();assert.deepEqual(await page.evaluate(()=>data.wrong),[]);
+ await page.evaluate(()=>{show('home');setMode('mc');startQuiz(false)});assert.equal(await page.locator('.choice').count(),4);const mc=await page.evaluate(()=>({answer:bank[quiz[idx]][4],explanation:bank[quiz[idx]][5]}));
+ await page.locator('.choice').nth(mc.answer).click();await page.locator('#submit').click();assert.equal(await page.locator('#feedback').textContent(),'✓ 正解：'+mc.explanation);assert.equal(await page.evaluate(()=>data.answers[data.answers.length-1].mode),'mc');assert.equal(await page.evaluate(()=>data.answers[data.answers.length-1].ok),true);
+ await page.evaluate(()=>show('stats'));
+ const payload=JSON.stringify(legacy);await page.locator('#backupFile').setInputFiles({name:'legacy.json',mimeType:'application/json',buffer:Buffer.from(payload)});await page.waitForFunction(()=>!document.getElementById('restore').disabled);page.once('dialog',d=>d.accept());await page.locator('#restore').click();assert.equal(await page.evaluate(()=>data.answers.length),2);
+ assert.equal(await page.locator('#rate').textContent(),'50%');assert.match(await page.locator('#categoryStats').textContent(),/累計 50% \/ 直近20解答 50% \/ 初回 0% \/ 誤答 1回/);
+ await page.evaluate(()=>{const today=localDay(new Date().toISOString());monthOffset=(2026-Number(today.slice(0,4)))*12+10-(Number(today.slice(5,7))-1);renderCalendar()});
+ assert.equal(await page.locator('[aria-label="2026-11-14 1問 正答率 0%"] small').textContent(),'1問 0%');assert.equal(await page.locator('[aria-label="2026-11-15 1問 正答率 100%"] small').textContent(),'1問 100%');
+ await page.getByText('翌月',{exact:true}).click();assert.equal(await page.locator('#monthLabel').textContent(),'2026年12月（JST）');await page.getByText('前月',{exact:true}).click();assert.equal(await page.locator('#monthLabel').textContent(),'2026年11月（JST）');
+ const persisted=await context.newPage();await persisted.goto(url);assert.deepEqual(await persisted.evaluate(()=>data.answers),legacy.answers);assert.deepEqual(await persisted.evaluate(()=>data.sessions),legacy.sessions);assert.deepEqual(await persisted.evaluate(()=>data.cycleSeen),[0]);await persisted.close();
+ const before=await page.evaluate(()=>localStorage.getItem(KEY));await page.locator('#backupFile').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from('{bad')});await page.waitForFunction(()=>document.getElementById('backupPreview').textContent.includes('読み込めません'));assert.equal(await page.evaluate(()=>localStorage.getItem(KEY)),before);
+ const downloadPromise=page.waitForEvent('download');await page.getByText('学習記録をJSONで書き出す',{exact:true}).click();const download=await downloadPromise;const stream=await download.createReadStream();let text='';for await(const part of stream)text+=part.toString();assert.equal(JSON.parse(text).data.answers.length,2);
+ await page.evaluate(()=>{localStorage.setItem(KEY,'invalid')});page.removeAllListeners('dialog');
+ await page.close();const corrupt=await context.newPage();await corrupt.addInitScript(()=>localStorage.setItem('fp-study-2-v1','invalid'));await corrupt.goto(url);assert.equal(await corrupt.evaluate(()=>storageBlocked),true);assert.equal(await corrupt.evaluate(()=>localStorage.getItem(KEY)),'invalid');
+ assert.deepEqual(errors,[]);console.log(name+': PASS (migration, 180-question cycle, review, metrics, metadata, JSON restore/export, corruption, JST/streaks, mobile UI)');await browser.close();
+}}finally{server.close()}})().catch(e=>{console.error(e);process.exitCode=1});
